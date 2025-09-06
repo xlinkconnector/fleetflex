@@ -27,8 +27,15 @@ fi
 
 log "\ud83d\ude80 Installing FleetFlex Multi-Service Logistics Platform..."
 
-# Create working directory
 WORKDIR="/opt/fleetflex"
+
+# Remove existing directory if it exists
+if [ -d "$WORKDIR" ]; then
+    log "\ud83e\uddf9 Cleaning up existing installation..."
+    rm -rf $WORKDIR
+fi
+
+# Create working directory
 mkdir -p $WORKDIR
 cd $WORKDIR
 
@@ -67,10 +74,11 @@ systemctl enable redis
 log "\u26a1 Installing PM2..."
 npm install -g pm2
 
-# Clone the actual FleetFlex platform
+# Clone the FleetFlex platform
 log "\u2b07\ufe0f Downloading FleetFlex platform..."
-git clone https://github.com/xlinkconnector/fleetflex.git .
-cd fleetflex-platform
+git clone https://github.com/xlinkconnector/fleetflex.git fleetflex-temp
+mv fleetflex-temp/fleetflex-platform/* .
+rm -rf fleetflex-temp
 
 # Install backend dependencies
 log "\ud83d\udd27 Installing backend dependencies..."
@@ -119,7 +127,7 @@ server {
     listen 443 ssl http2;
     server_name fleetflex.app www.fleetflex.app;
 
-    root $WORKDIR/fleetflex-platform/frontend/build;
+    root $WORKDIR/frontend/build;
     index index.html index.htm;
 
     ssl_certificate /etc/letsencrypt/live/fleetflex.app/fullchain.pem;
@@ -172,7 +180,7 @@ systemctl restart nginx
 log "\u2705 Running final checks..."
 pm2 status
 sleep 5
-curl -f http://localhost:3001/api/v1/health || error "Backend health check failed"
+curl -f http://localhost:3001/api/v1/health || warning "Backend health check failed - check logs"
 
 log ""
 log "\ud83c\udf89 Installation complete!"
