@@ -25,17 +25,18 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+WORKDIR="/opt/fleetflex"
+REPO_URL="https://github.com/xlinkconnector/fleetflex.git"
+
 log "\ud83d\ude80 Installing FleetFlex Multi-Service Logistics Platform..."
 
-WORKDIR="/opt/fleetflex"
-
-# Remove existing directory if it exists
+# Clean up if directory exists
 if [ -d "$WORKDIR" ]; then
-    log "\ud83e\uddf9 Cleaning up existing installation..."
+    log "\ud83e\uddf9 Cleaning existing installation..."
     rm -rf $WORKDIR
 fi
 
-# Create working directory
+# Create and enter working directory
 mkdir -p $WORKDIR
 cd $WORKDIR
 
@@ -74,11 +75,10 @@ systemctl enable redis
 log "\u26a1 Installing PM2..."
 npm install -g pm2
 
-# Clone the FleetFlex platform
+# Clone repository
 log "\u2b07\ufe0f Downloading FleetFlex platform..."
-git clone https://github.com/xlinkconnector/fleetflex.git fleetflex-temp
-mv fleetflex-temp/fleetflex-platform/* .
-rm -rf fleetflex-temp
+git clone $REPO_URL fleetflex-repo
+cd fleetflex-repo
 
 # Install backend dependencies
 log "\ud83d\udd27 Installing backend dependencies..."
@@ -127,7 +127,7 @@ server {
     listen 443 ssl http2;
     server_name fleetflex.app www.fleetflex.app;
 
-    root $WORKDIR/frontend/build;
+    root $WORKDIR/fleetflex-repo/frontend/build;
     index index.html index.htm;
 
     ssl_certificate /etc/letsencrypt/live/fleetflex.app/fullchain.pem;
@@ -180,7 +180,7 @@ systemctl restart nginx
 log "\u2705 Running final checks..."
 pm2 status
 sleep 5
-curl -f http://localhost:3001/api/v1/health || warning "Backend health check failed - check logs"
+curl -f http://localhost:3001/api/v1/health || log "\u26a0\ufe0f Backend health check failed - check logs with 'pm2 logs'"
 
 log ""
 log "\ud83c\udf89 Installation complete!"
@@ -188,9 +188,7 @@ log "\ud83c\udf10 Your FleetFlex platform is live at: https://fleetflex.app"
 log "\ud83d\udd10 Admin Panel: https://fleetflex.app/admin"
 log "\ud83d\udce7 Login: admin@fleetflex.app / Bigship247$$"
 log ""
+log "\ud83d\udccb Working directory: $WORKDIR/fleetflex-repo"
 log "\ud83d\udccb Useful commands:"
-log "   pm2 status          # Check service status"
-log "   pm2 logs           # View logs"
-log "   pm2 restart all    # Restart services"
-log "   systemctl status mongod  # Check MongoDB"
-log "   systemctl status redis   # Check Redis"
+log "   cd $WORKDIR/fleetflex-repo && pm2 status"
+log "   cd $WORKDIR/fleetflex-repo/backend && pm2 logs"
