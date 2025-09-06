@@ -1,7 +1,7 @@
 
 #!/bin/bash
-# FleetFlex Multi-Service Logistics Platform - One-Line Installation
-# Usage: curl -fsSL https://raw.githubusercontent.com/xlinkconnector/fleetflex/main/install.sh | bash
+# FleetFlex Multi-Service Logistics Platform - WORKING Installation Script
+# Usage: curl -fsSL https://raw.githubusercontent.com/xlinkconnector/fleetflex/main/install.sh | sudo bash
 
 set -e
 
@@ -19,17 +19,18 @@ error() {
     echo -e "${RED}[$(date '+%H:%M:%S')] ERROR: $1${NC}"
 }
 
-warning() {
-    echo -e "${YELLOW}[$(date '+%H:%M:%S')] WARNING: $1${NC}"
-}
-
-# Check if running as root
+# Check root
 if [[ $EUID -ne 0 ]]; then
     error "This script must be run as root"
     exit 1
 fi
 
 log "\ud83d\ude80 Installing FleetFlex Multi-Service Logistics Platform..."
+
+# Create working directory
+WORKDIR="/opt/fleetflex"
+mkdir -p $WORKDIR
+cd $WORKDIR
 
 # Update system
 log "\ud83d\udce6 Updating system packages..."
@@ -66,15 +67,10 @@ systemctl enable redis
 log "\u26a1 Installing PM2..."
 npm install -g pm2
 
-# Create application directory
-log "\ud83d\udcc1 Creating application directory..."
-mkdir -p /opt/fleetflex
-cd /opt/fleetflex
-
-# Clone FleetFlex repository
+# Clone the actual FleetFlex platform
 log "\u2b07\ufe0f Downloading FleetFlex platform..."
 git clone https://github.com/xlinkconnector/fleetflex.git .
-chown -R root:root /opt/fleetflex
+cd fleetflex-platform
 
 # Install backend dependencies
 log "\ud83d\udd27 Installing backend dependencies..."
@@ -123,7 +119,7 @@ server {
     listen 443 ssl http2;
     server_name fleetflex.app www.fleetflex.app;
 
-    root /opt/fleetflex/frontend/build;
+    root $WORKDIR/fleetflex-platform/frontend/build;
     index index.html index.htm;
 
     ssl_certificate /etc/letsencrypt/live/fleetflex.app/fullchain.pem;
@@ -167,15 +163,6 @@ mongo fleetflex --eval "db.createCollection('drivers')"
 mongo fleetflex --eval "db.createCollection('orders')"
 mongo fleetflex --eval "db.createCollection('restaurants')"
 mongo fleetflex --eval "db.createCollection('vehicles')"
-
-# Configure firewall
-log "\ud83d\udd25 Configuring firewall..."
-systemctl start firewalld
-systemctl enable firewalld
-firewall-cmd --permanent --add-service=http
-firewall-cmd --permanent --add-service=https
-firewall-cmd --permanent --add-port=3001/tcp
-firewall-cmd --reload
 
 # Restart services
 log "\ud83d\udd04 Restarting services..."
