@@ -240,9 +240,11 @@ const authSlice = createSlice({
   name: 'auth',
   initialState: {
     user: null,
+    token: null,
     isAuthenticated: false,
     loading: false,
-    error: null
+    error: null,
+    userType: null
   },
   reducers: {
     loginStart: (state) => {
@@ -251,56 +253,208 @@ const authSlice = createSlice({
     },
     loginSuccess: (state, action) => {
       state.loading = false
-      state.user = action.payload
+      state.user = action.payload.user
+      state.token = action.payload.token
       state.isAuthenticated = true
+      state.userType = action.payload.userType
+      state.error = null
     },
     loginFailure: (state, action) => {
       state.loading = false
       state.error = action.payload
+      state.user = null
+      state.token = null
+      state.isAuthenticated = false
     },
     logout: (state) => {
       state.user = null
+      state.token = null
       state.isAuthenticated = false
+      state.userType = null
+      state.error = null
+    },
+    updateUser: (state, action) => {
+      state.user = { ...state.user, ...action.payload }
+    },
+    clearError: (state) => {
       state.error = null
     }
   }
 })
 
-export const { loginStart, loginSuccess, loginFailure, logout } = authSlice.actions
+export const { 
+  loginStart, 
+  loginSuccess, 
+  loginFailure, 
+  logout, 
+  updateUser, 
+  clearError 
+} = authSlice.actions
+
 export default authSlice.reducer
 EOF
 
-# Create basic components
-mkdir -p frontend/src/components
-cat > frontend/src/components/Home.jsx << 'EOF'
+# Create index.html
+cat > frontend/index.html << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FleetFlex - Multi-Service Logistics Platform</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+EOF
+
+# Create main.jsx
+cat > frontend/src/main.jsx << 'EOF'
 import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.jsx'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+)
+EOF
+
+# Create App.jsx
+cat > frontend/src/App.jsx << 'EOF'
+import React from 'react'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { Provider } from 'react-redux'
+import { store } from './store/store'
+import Home from './pages/Home'
+import './App.css'
+
+function App() {
+  return (
+    <Provider store={store}>
+      <Router>
+        <div className="App">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/admin" element={<div>Admin Dashboard</div>} />
+          </Routes>
+        </div>
+      </Provider>
+    </Provider>
+  )
+}
+
+export default App
+EOF
+
+# Create Home.jsx
+cat > frontend/src/pages/Home.jsx << 'EOF'
+import React from 'react'
+import styled from 'styled-components'
+
+const Container = styled.div`
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+`
+
+const Header = styled.h1`
+  color: #2563eb;
+  margin-bottom: 2rem;
+`
+
+const ServicesGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 2rem;
+  margin: 2rem 0;
+`
+
+const ServiceCard = styled.div`
+  background: #f8fafc;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+`
 
 const Home = () => {
+  const services = [
+    { icon: '\ud83c\udf55', name: 'Food Delivery', description: 'Order from your favorite restaurants' },
+    { icon: '\ud83d\ude97', name: 'Rideshare', description: 'Get rides anywhere, anytime' },
+    { icon: '\ud83d\udce6', name: 'Package Shipping', description: 'Send and receive packages' },
+    { icon: '\ud83c\udfe0', name: 'Moving Services', description: 'Professional moving assistance' },
+    { icon: '\ud83d\ude9b', name: 'Freight Transport', description: 'Heavy cargo and freight' }
+  ]
+
   return (
-    <div>
-      <h1>FleetFlex Multi-Service Logistics Platform</h1>
+    <Container>
+      <Header>FleetFlex Multi-Service Logistics Platform</Header>
       <p>Your complete logistics solution is now running!</p>
-      <div>
-        <h2>Services Available:</h2>
-        <ul>
-          <li>\ud83c\udf55 Food Delivery</li>
-          <li>\ud83d\ude97 Rideshare</li>
-          <li>\ud83d\udce6 Package Shipping</li>
-          <li>\ud83c\udfe0 Moving Services</li>
-          <li>\ud83d\ude9b Freight Transport</li>
-        </ul>
-      </div>
-      <div>
-        <h2>Admin Access:</h2>
+      
+      <ServicesGrid>
+        {services.map((service, index) => (
+          <ServiceCard key={index}>
+            <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>
+              {service.icon}
+            </div>
+            <h3>{service.name}</h3>
+            <p>{service.description}</p>
+          </ServiceCard>
+        ))}
+      </ServicesGrid>
+
+      <div style={{ marginTop: '3rem' }}>
+        <h3>Admin Access</h3>
         <p>Email: admin@fleetflex.app</p>
         <p>Password: Bigship247$$</p>
-        <a href="/admin">Go to Admin Dashboard</a>
+        <a href="/admin" style={{ color: '#2563eb', textDecoration: 'none' }}>
+          Go to Admin Dashboard
+        </a>
       </div>
-    </div>
+    </Container>
   )
 }
 
 export default Home
+EOF
+
+# Create CSS files
+cat > frontend/src/App.css << 'EOF'
+.App {
+  text-align: center;
+}
+
+.App-header {
+  background-color: #282c34;
+  padding: 20px;
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+EOF
+
+cat > frontend/src/index.css << 'EOF'
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
 EOF
 
 # Create environment file
@@ -368,17 +522,17 @@ server {
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
-    }
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_cache_bypass \$http_upgrade;
+  }
 
-    location /socket.io {
-        proxy_pass http://localhost:3001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-    }
+  location /socket.io {
+    proxy_pass http://localhost:3001;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host \$host;
+  }
 }
 EOF
 
