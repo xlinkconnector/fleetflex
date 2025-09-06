@@ -1,6 +1,6 @@
 
 #!/bin/bash
-# FleetFlex Multi-Service Logistics Platform - WORKING Installation Script
+# FleetFlex Multi-Service Logistics Platform - FIXED Installation Script
 # Usage: curl -fsSL https://raw.githubusercontent.com/xlinkconnector/fleetflex/main/install.sh | sudo bash
 
 set -e
@@ -69,23 +69,41 @@ log "\u26a1 Installing PM2..."
 npm install -g pm2
 
 # Download and extract the platform
-log "\ud83d\udce6 Downloading FleetFlex platform..."
+log "\ud83d\udce6 Downloading and extracting FleetFlex platform..."
 curl -fsSL https://raw.githubusercontent.com/xlinkconnector/fleetflex/main/fleetflex.zip -o fleetflex.zip
 unzip -o fleetflex.zip
 
-# Find the actual platform directory
-PLATFORM_DIR=$(find . -name "fleetflex-platform" -type d | head -1)
-if [ -z "$PLATFORM_DIR" ]; then
-    log "\ud83d\udcc1 Extracting platform files..."
-    unzip -o fleetflex.zip
-    PLATFORM_DIR="fleetflex-platform"
-fi
-
 # Navigate to platform directory
-cd "$PLATFORM_DIR" || error "Could not find platform directory"
+cd fleetflex-platform || error "Could not find fleetflex-platform directory"
+
+# Fix vite.config.js
+log "\ud83d\udd27 Fixing build configuration..."
+cat > frontend/vite.config.js << 'EOF'
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  build: {
+    outDir: 'build',
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+        },
+      },
+    },
+  },
+  server: {
+    port: 3000,
+    open: true,
+  },
+})
+EOF
 
 # Install backend dependencies
-log "\ud83d\udd27 Installing backend dependencies..."
+log "\ud83d\udce6 Installing backend dependencies..."
 cd backend
 npm install
 
@@ -131,7 +149,7 @@ server {
     listen 443 ssl http2;
     server_name fleetflex.app www.fleetflex.app;
 
-    root $WORKDIR/$PLATFORM_DIR/frontend/build;
+    root $WORKDIR/fleetflex-platform/frontend/build;
     index index.html index.htm;
 
     ssl_certificate /etc/letsencrypt/live/fleetflex.app/fullchain.pem;
@@ -192,7 +210,7 @@ log "\ud83c\udf10 Your FleetFlex platform is live at: https://fleetflex.app"
 log "\ud83d\udd10 Admin Panel: https://fleetflex.app/admin"
 log "\ud83d\udce7 Login: admin@fleetflex.app / Bigship247$$"
 log ""
-log "\ud83d\udccb Working directory: $WORKDIR/$PLATFORM_DIR"
+log "\ud83d\udccb Working directory: $WORKDIR/fleetflex-platform"
 log "\ud83d\udccb Useful commands:"
-log "   cd $WORKDIR/$PLATFORM_DIR && pm2 status"
-log "   cd $WORKDIR/$PLATFORM_DIR/backend && pm2 logs"
+log "   cd $WORKDIR/fleetflex-platform && pm2 status"
+log "   cd $WORKDIR/fleetflex-platform/backend && pm2 logs"
