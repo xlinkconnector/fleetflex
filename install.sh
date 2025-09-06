@@ -1,6 +1,6 @@
 
 #!/bin/bash
-# FleetFlex Multi-Service Logistics Platform - FIXED Installation Script
+# FleetFlex Multi-Service Logistics Platform - COMPLETE Installation Script
 # Usage: curl -fsSL https://raw.githubusercontent.com/xlinkconnector/fleetflex/main/install.sh | sudo bash
 
 set -e
@@ -76,9 +76,36 @@ unzip -o fleetflex.zip
 # Navigate to platform directory
 cd fleetflex-platform || error "Could not find fleetflex-platform directory"
 
+# Install all required dependencies
+log "\ud83d\udce6 Installing all required dependencies..."
+
+# Backend dependencies
+cd backend
+npm install express mongoose cors dotenv bcryptjs jsonwebtoken multer nodemailer stripe socket.io redis
+
+# Frontend dependencies
+cd ../frontend
+npm install react react-dom react-router-dom axios redux react-redux @reduxjs/toolkit styled-components framer-motion react-hook-form @vitejs/plugin-react
+
+# Create environment file
+log "\u2699\ufe0f Creating environment configuration..."
+cat > ../backend/.env << EOF
+NODE_ENV=production
+PORT=3001
+MONGODB_URI=mongodb://localhost:27017/fleetflex
+REDIS_URL=redis://localhost:6379
+JWT_SECRET=fleetflex-secure-jwt-key-2024-production
+JWT_EXPIRES_IN=90d
+JWT_COOKIE_EXPIRES_IN=90
+FRONTEND_URL=https://fleetflex.app
+API_URL=https://fleetflex.app/api/v1
+ADMIN_EMAIL=admin@fleetflex.app
+ADMIN_PASSWORD=Bigship247\$\$
+EOF
+
 # Fix vite.config.js
 log "\ud83d\udd27 Fixing build configuration..."
-cat > frontend/vite.config.js << 'EOF'
+cat > vite.config.js << 'EOF'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -88,6 +115,7 @@ export default defineConfig({
     outDir: 'build',
     sourcemap: true,
     rollupOptions: {
+      external: [],
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom'],
@@ -102,32 +130,12 @@ export default defineConfig({
 })
 EOF
 
-# Install backend dependencies
-log "\ud83d\udce6 Installing backend dependencies..."
-cd backend
-npm install
-
-# Create environment file
-log "\u2699\ufe0f Creating environment configuration..."
-cat > .env << EOF
-NODE_ENV=production
-PORT=3001
-MONGODB_URI=mongodb://localhost:27017/fleetflex
-REDIS_URL=redis://localhost:6379
-JWT_SECRET=fleetflex-secure-jwt-key-2024-production
-JWT_EXPIRES_IN=90d
-JWT_COOKIE_EXPIRES_IN=90
-FRONTEND_URL=https://fleetflex.app
-API_URL=https://fleetflex.app/api/v1
-ADMIN_EMAIL=admin@fleetflex.app
-ADMIN_PASSWORD=Bigship247\$\$
-EOF
-
-# Install frontend dependencies and build
-log "\ud83c\udfa8 Installing frontend dependencies..."
-cd ../frontend
-npm install
-npm run build
+# Build frontend
+log "\ud83c\udfd7\ufe0f Building frontend..."
+npm run build || {
+    log "\u26a0\ufe0f Build failed, trying with external deps..."
+    npm run build -- --external framer-motion
+}
 
 # Start backend with PM2
 log "\ud83d\ude80 Starting backend services..."
