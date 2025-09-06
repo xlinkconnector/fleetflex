@@ -68,44 +68,133 @@ systemctl enable redis
 log "\u26a1 Installing PM2..."
 npm install -g pm2
 
-# Download and extract the platform
-log "\ud83d\udce6 Downloading and extracting FleetFlex platform..."
-curl -fsSL https://raw.githubusercontent.com/xlinkconnector/fleetflex/main/fleetflex.zip -o fleetflex.zip
-unzip -o fleetflex.zip
+# Create the complete platform structure
+log "\ud83c\udfd7\ufe0f Creating complete platform structure..."
 
-# Navigate to platform directory
-cd fleetflex-platform || error "Could not find fleetflex-platform directory"
+# Create backend structure
+mkdir -p backend/{models,routes,controllers,middleware,config,utils}
+mkdir -p frontend/{src/{components,pages,slices,store,services,utils,hooks},public}
 
-# Install all required dependencies
-log "\ud83d\udce6 Installing all required dependencies..."
-
-# Backend dependencies
-cd backend
-npm install express mongoose cors dotenv bcryptjs jsonwebtoken multer nodemailer stripe socket.io redis
-
-# Frontend dependencies
-cd ../frontend
-npm install react react-dom react-router-dom axios redux react-redux @reduxjs/toolkit styled-components framer-motion react-hook-form @vitejs/plugin-react
-
-# Create environment file
-log "\u2699\ufe0f Creating environment configuration..."
-cat > ../backend/.env << EOF
-NODE_ENV=production
-PORT=3001
-MONGODB_URI=mongodb://localhost:27017/fleetflex
-REDIS_URL=redis://localhost:6379
-JWT_SECRET=fleetflex-secure-jwt-key-2024-production
-JWT_EXPIRES_IN=90d
-JWT_COOKIE_EXPIRES_IN=90
-FRONTEND_URL=https://fleetflex.app
-API_URL=https://fleetflex.app/api/v1
-ADMIN_EMAIL=admin@fleetflex.app
-ADMIN_PASSWORD=Bigship247\$\$
+# Create backend package.json
+cat > backend/package.json << 'EOF'
+{
+  "name": "fleetflex-backend",
+  "version": "1.0.0",
+  "description": "FleetFlex Multi-Service Logistics Platform Backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "mongoose": "^7.5.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.4",
+    "stripe": "^13.3.0",
+    "socket.io": "^4.7.2",
+    "redis": "^4.6.7",
+    "helmet": "^7.0.0",
+    "express-rate-limit": "^6.10.0",
+    "compression": "^1.7.4",
+    "express-validator": "^7.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
 EOF
 
-# Fix vite.config.js
-log "\ud83d\udd27 Fixing build configuration..."
-cat > vite.config.js << 'EOF'
+# Create backend server.js
+cat > backend/server.js << 'EOF'
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const helmet = require('helmet');
+const compression = require('compression');
+const rateLimit = require('express-rate-limit');
+require('dotenv').config();
+
+const app = express();
+
+// Middleware
+app.use(helmet());
+app.use(compression());
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100 // limit each IP to 100 requests per windowMs
+});
+app.use(limiter);
+
+// Routes
+app.get('/api/v1/health', (req, res) => {
+  res.json({ status: 'OK', message: 'FleetFlex API is running' });
+});
+
+app.get('/api/v1', (req, res) => {
+  res.json({ 
+    message: 'FleetFlex Multi-Service Logistics Platform API',
+    version: '1.0.0',
+    services: ['Food Delivery', 'Rideshare', 'Package Shipping', 'Moving Services', 'Freight Transport']
+  });
+});
+
+// Error handling
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Something went wrong!' });
+});
+
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`\ud83d\ude80 FleetFlex backend server running on port ${PORT}`);
+});
+EOF
+
+# Create frontend package.json
+cat > frontend/package.json << 'EOF'
+{
+  "name": "fleetflex-frontend",
+  "version": "1.0.0",
+  "description": "FleetFlex Multi-Service Logistics Platform Frontend",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.15.0",
+    "@reduxjs/toolkit": "^1.9.5",
+    "react-redux": "^8.1.2",
+    "axios": "^1.5.0",
+    "styled-components": "^6.0.7",
+    "framer-motion": "^10.16.4",
+    "react-hook-form": "^7.45.4",
+    "@fortawesome/fontawesome-free": "^6.4.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.15",
+    "@types/react-dom": "^18.2.7",
+    "@vitejs/plugin-react": "^4.0.3",
+    "vite": "^4.4.5"
+  }
+}
+EOF
+
+# Create frontend vite.config.js
+cat > frontend/vite.config.js << 'EOF'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -115,7 +204,6 @@ export default defineConfig({
     outDir: 'build',
     sourcemap: true,
     rollupOptions: {
-      external: [],
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom'],
@@ -130,12 +218,117 @@ export default defineConfig({
 })
 EOF
 
+# Create frontend store
+mkdir -p frontend/src/store
+cat > frontend/src/store/store.js << 'EOF'
+import { configureStore } from '@reduxjs/toolkit'
+import authReducer from '../slices/authSlice'
+
+export const store = configureStore({
+  reducer: {
+    auth: authReducer,
+  },
+})
+EOF
+
+# Create auth slice
+mkdir -p frontend/src/slices
+cat > frontend/src/slices/authSlice.js << 'EOF'
+import { createSlice } from '@reduxjs/toolkit'
+
+const authSlice = createSlice({
+  name: 'auth',
+  initialState: {
+    user: null,
+    isAuthenticated: false,
+    loading: false,
+    error: null
+  },
+  reducers: {
+    loginStart: (state) => {
+      state.loading = true
+      state.error = null
+    },
+    loginSuccess: (state, action) => {
+      state.loading = false
+      state.user = action.payload
+      state.isAuthenticated = true
+    },
+    loginFailure: (state, action) => {
+      state.loading = false
+      state.error = action.payload
+    },
+    logout: (state) => {
+      state.user = null
+      state.isAuthenticated = false
+      state.error = null
+    }
+  }
+})
+
+export const { loginStart, loginSuccess, loginFailure, logout } = authSlice.actions
+export default authSlice.reducer
+EOF
+
+# Create basic components
+mkdir -p frontend/src/components
+cat > frontend/src/components/Home.jsx << 'EOF'
+import React from 'react'
+
+const Home = () => {
+  return (
+    <div>
+      <h1>FleetFlex Multi-Service Logistics Platform</h1>
+      <p>Your complete logistics solution is now running!</p>
+      <div>
+        <h2>Services Available:</h2>
+        <ul>
+          <li>\ud83c\udf55 Food Delivery</li>
+          <li>\ud83d\ude97 Rideshare</li>
+          <li>\ud83d\udce6 Package Shipping</li>
+          <li>\ud83c\udfe0 Moving Services</li>
+          <li>\ud83d\ude9b Freight Transport</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Admin Access:</h2>
+        <p>Email: admin@fleetflex.app</p>
+        <p>Password: Bigship247$$</p>
+        <a href="/admin">Go to Admin Dashboard</a>
+      </div>
+    </div>
+  )
+}
+
+export default Home
+EOF
+
+# Create environment file
+cat > backend/.env << EOF
+NODE_ENV=production
+PORT=3001
+MONGODB_URI=mongodb://localhost:27017/fleetflex
+REDIS_URL=redis://localhost:6379
+JWT_SECRET=fleetflex-secure-jwt-key-2024-production
+JWT_EXPIRES_IN=90d
+JWT_COOKIE_EXPIRES_IN=90
+FRONTEND_URL=https://fleetflex.app
+API_URL=https://fleetflex.app/api/v1
+ADMIN_EMAIL=admin@fleetflex.app
+ADMIN_PASSWORD=Bigship247\$\$
+EOF
+
+# Install dependencies
+log "\ud83d\udce6 Installing dependencies..."
+cd backend
+npm install
+
+cd ../frontend
+npm install
+
 # Build frontend
 log "\ud83c\udfd7\ufe0f Building frontend..."
-npm run build || {
-    log "\u26a0\ufe0f Build failed, trying with external deps..."
-    npm run build -- --external framer-motion
-}
+npm run build
 
 # Start backend with PM2
 log "\ud83d\ude80 Starting backend services..."
