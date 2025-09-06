@@ -26,15 +26,8 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 WORKDIR="/opt/fleetflex"
-REPO_URL="https://github.com/xlinkconnector/fleetflex.git"
 
 log "\ud83d\ude80 Installing FleetFlex Multi-Service Logistics Platform..."
-
-# Clean up if directory exists
-if [ -d "$WORKDIR" ]; then
-    log "\ud83e\uddf9 Cleaning existing installation..."
-    rm -rf $WORKDIR
-fi
 
 # Create and enter working directory
 mkdir -p $WORKDIR
@@ -75,10 +68,21 @@ systemctl enable redis
 log "\u26a1 Installing PM2..."
 npm install -g pm2
 
-# Clone repository
-log "\u2b07\ufe0f Downloading FleetFlex platform..."
-git clone $REPO_URL fleetflex-repo
-cd fleetflex-repo
+# Download and extract the platform
+log "\ud83d\udce6 Downloading FleetFlex platform..."
+curl -fsSL https://raw.githubusercontent.com/xlinkconnector/fleetflex/main/fleetflex.zip -o fleetflex.zip
+unzip -o fleetflex.zip
+
+# Find the actual platform directory
+PLATFORM_DIR=$(find . -name "fleetflex-platform" -type d | head -1)
+if [ -z "$PLATFORM_DIR" ]; then
+    log "\ud83d\udcc1 Extracting platform files..."
+    unzip -o fleetflex.zip
+    PLATFORM_DIR="fleetflex-platform"
+fi
+
+# Navigate to platform directory
+cd "$PLATFORM_DIR" || error "Could not find platform directory"
 
 # Install backend dependencies
 log "\ud83d\udd27 Installing backend dependencies..."
@@ -127,7 +131,7 @@ server {
     listen 443 ssl http2;
     server_name fleetflex.app www.fleetflex.app;
 
-    root $WORKDIR/fleetflex-repo/frontend/build;
+    root $WORKDIR/$PLATFORM_DIR/frontend/build;
     index index.html index.htm;
 
     ssl_certificate /etc/letsencrypt/live/fleetflex.app/fullchain.pem;
@@ -188,7 +192,7 @@ log "\ud83c\udf10 Your FleetFlex platform is live at: https://fleetflex.app"
 log "\ud83d\udd10 Admin Panel: https://fleetflex.app/admin"
 log "\ud83d\udce7 Login: admin@fleetflex.app / Bigship247$$"
 log ""
-log "\ud83d\udccb Working directory: $WORKDIR/fleetflex-repo"
+log "\ud83d\udccb Working directory: $WORKDIR/$PLATFORM_DIR"
 log "\ud83d\udccb Useful commands:"
-log "   cd $WORKDIR/fleetflex-repo && pm2 status"
-log "   cd $WORKDIR/fleetflex-repo/backend && pm2 logs"
+log "   cd $WORKDIR/$PLATFORM_DIR && pm2 status"
+log "   cd $WORKDIR/$PLATFORM_DIR/backend && pm2 logs"
