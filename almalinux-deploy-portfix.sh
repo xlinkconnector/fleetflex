@@ -19,6 +19,11 @@ INSTALL_DIR="$(pwd)/fleetflex"
 # Define Docker Compose command
 DOCKER_COMPOSE="/usr/local/bin/docker-compose"
 
+# Define alternative ports (in case default ports are in use)
+BACKEND_PORT=5000
+FRONTEND_PORT=3000
+MONGODB_PORT=27018  # Changed from 27017 to avoid conflict
+
 # Logging functions
 log() {
     echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')] $1${NC}"
@@ -34,6 +39,16 @@ warning() {
 
 info() {
     echo -e "${BLUE}[INFO] $1${NC}"
+}
+
+# Check if a port is in use
+check_port() {
+    local port=$1
+    if netstat -tuln | grep -q ":$port "; then
+        return 0  # Port is in use
+    else
+        return 1  # Port is free
+    fi
 }
 
 # Check system requirements
@@ -60,6 +75,35 @@ check_system_requirements() {
     FREE_DISK=$(df -h / | awk 'NR==2 {print $4}')
     info "Available disk space: $FREE_DISK"
     
+    # Check if netstat is installed
+    if ! command -v netstat &> /dev/null; then
+        info "Installing net-tools for port checking..."
+        sudo dnf install -y net-tools
+    fi
+    
+    # Check for port conflicts
+    info "Checking for port conflicts..."
+    
+    # Check MongoDB port
+    if check_port 27017; then
+        warning "Port 27017 is already in use. MongoDB will use port $MONGODB_PORT instead."
+        info "If you have MongoDB already running on your system, this is normal."
+    else
+        MONGODB_PORT=27017
+    fi
+    
+    # Check Backend port
+    if check_port 5000; then
+        warning "Port 5000 is already in use. Backend will use port 5001 instead."
+        BACKEND_PORT=5001
+    fi
+    
+    # Check Frontend port
+    if check_port 3000; then
+        warning "Port 3000 is already in use. Frontend will use port 3001 instead."
+        FRONTEND_PORT=3001
+    fi
+    
     log "System requirements check completed."
 }
 
@@ -71,7 +115,7 @@ install_dependencies() {
     sudo dnf update -y
     
     # Install required packages
-    sudo dnf install -y curl wget git tar unzip
+    sudo dnf install -y curl wget git tar unzip net-tools
     
     # Install Docker if not already installed
     if ! command -v docker &> /dev/null; then
@@ -114,8 +158,8 @@ create_project_structure() {
     # Create directories
     mkdir -p "$INSTALL_DIR"/{backend,frontend,mongodb}
     
-    # Create docker-compose.yml
-    cat > "$INSTALL_DIR/docker-compose.yml" << 'EOF'
+    # Create docker-compose.yml with dynamic ports
+    cat > "$INSTALL_DIR/docker-compose.yml" << EOF
 version: '3.8'
 
 services:
@@ -125,7 +169,7 @@ services:
     container_name: fleetflex-backend
     restart: unless-stopped
     ports:
-      - "5000:5000"
+      - "$BACKEND_PORT:5000"
     volumes:
       - ./backend:/app
       - /app/node_modules
@@ -144,14 +188,14 @@ services:
     container_name: fleetflex-frontend
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "$FRONTEND_PORT:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules
     working_dir: /app
     command: sh -c "npm install && npm start"
     environment:
-      - REACT_APP_API_URL=http://localhost:5000
+      - REACT_APP_API_URL=http://localhost:$BACKEND_PORT
     depends_on:
       - backend
 
@@ -161,7 +205,7 @@ services:
     container_name: fleetflex-mongodb
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "$MONGODB_PORT:27017"
     volumes:
       - mongodb_data:/data/db
 
@@ -190,7 +234,7 @@ EOF
 }
 EOF
     
-    cat > "$INSTALL_DIR/backend/index.js" << 'EOF'
+    cat > "$INSTALL_DIR/backend/index.js" << EOF
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -203,7 +247,7 @@ app.use(cors());
 app.use(express.json());
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/fleetflex')
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:$MONGODB_PORT/fleetflex')
   .then(() => console.log('MongoDB connected'))
   .catch(err => console.error('MongoDB connection error:', err));
 
@@ -249,7 +293,7 @@ const seedData = async () => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(\`Server running on port \${PORT}\`);
   seedData();
 });
 EOF
@@ -300,7 +344,7 @@ root.render(
 );
 EOF
     
-    cat > "$INSTALL_DIR/frontend/src/App.js" << 'EOF'
+    cat > "$INSTALL_DIR/frontend/src/App.js" << EOF
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './App.css';
@@ -311,12 +355,12 @@ function App() {
 
   useEffect(() => {
     // Check API health
-    axios.get('http://localhost:5000/health')
+    axios.get('http://localhost:$BACKEND_PORT/health')
       .then(response => setStatus(response.data.message))
       .catch(error => setStatus('Error connecting to API'));
     
     // Fetch users
-    axios.get('http://localhost:5000/api/users')
+    axios.get('http://localhost:$BACKEND_PORT/api/users')
       .then(response => setUsers(response.data))
       .catch(error => console.error('Error fetching users:', error));
   }, []);
@@ -474,9 +518,9 @@ fi
 
 # Configure firewall
 echo -e "\${BLUE}Configuring firewall...${NC}"
-sudo firewall-cmd --permanent --add-port=3000/tcp
-sudo firewall-cmd --permanent --add-port=5000/tcp
-sudo firewall-cmd --permanent --add-port=27017/tcp
+sudo firewall-cmd --permanent --add-port=$FRONTEND_PORT/tcp
+sudo firewall-cmd --permanent --add-port=$BACKEND_PORT/tcp
+sudo firewall-cmd --permanent --add-port=$MONGODB_PORT/tcp
 sudo firewall-cmd --reload
 
 # Start the services
@@ -484,9 +528,9 @@ echo -e "\${GREEN}Starting FleetFlex services...${NC}"
 $DOCKER_COMPOSE up -d
 
 echo -e "\${GREEN}FleetFlex installation completed!${NC}"
-echo -e "\${BLUE}Frontend:${NC} http://localhost:3000"
-echo -e "\${BLUE}Backend API:${NC} http://localhost:5000"
-echo -e "\${BLUE}MongoDB:${NC} mongodb://localhost:27017/fleetflex"
+echo -e "\${BLUE}Frontend:${NC} http://localhost:$FRONTEND_PORT"
+echo -e "\${BLUE}Backend API:${NC} http://localhost:$BACKEND_PORT"
+echo -e "\${BLUE}MongoDB:${NC} mongodb://localhost:$MONGODB_PORT/fleetflex"
 EOF
     
     chmod +x "$INSTALL_DIR/install.sh"
@@ -507,9 +551,9 @@ configure_firewall() {
     fi
     
     # Configure firewall rules
-    sudo firewall-cmd --permanent --add-port=3000/tcp
-    sudo firewall-cmd --permanent --add-port=5000/tcp
-    sudo firewall-cmd --permanent --add-port=27017/tcp
+    sudo firewall-cmd --permanent --add-port=$FRONTEND_PORT/tcp
+    sudo firewall-cmd --permanent --add-port=$BACKEND_PORT/tcp
+    sudo firewall-cmd --permanent --add-port=$MONGODB_PORT/tcp
     sudo firewall-cmd --reload
     
     info "Firewall configured successfully."
@@ -576,9 +620,9 @@ display_summary() {
     log "FleetFlex deployment completed successfully!"
     echo ""
     echo -e "${GREEN}=== FleetFlex Services ===${NC}"
-    echo -e "${BLUE}Frontend:${NC} http://localhost:3000"
-    echo -e "${BLUE}Backend API:${NC} http://localhost:5000"
-    echo -e "${BLUE}MongoDB:${NC} mongodb://localhost:27017/fleetflex"
+    echo -e "${BLUE}Frontend:${NC} http://localhost:$FRONTEND_PORT"
+    echo -e "${BLUE}Backend API:${NC} http://localhost:$BACKEND_PORT"
+    echo -e "${BLUE}MongoDB:${NC} mongodb://localhost:$MONGODB_PORT/fleetflex"
     echo ""
     echo -e "${GREEN}=== Management Commands ===${NC}"
     echo -e "${BLUE}Start services:${NC} cd $INSTALL_DIR && $DOCKER_COMPOSE up -d"
