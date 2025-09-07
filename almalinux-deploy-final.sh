@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 # FleetFlex Multi-Service Logistics Platform Deployment Script for AlmaLinux
@@ -11,6 +12,12 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+
+# Define the installation directory
+INSTALL_DIR="$(pwd)/fleetflex"
+
+# Define Docker Compose command
+DOCKER_COMPOSE="/usr/local/bin/docker-compose"
 
 # Logging functions
 log() {
@@ -80,13 +87,21 @@ install_dependencies() {
     fi
     
     # Install Docker Compose if not already installed
-    if ! command -v docker-compose &> /dev/null; then
+    if [ ! -f "$DOCKER_COMPOSE" ]; then
         info "Installing Docker Compose..."
-        sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-        sudo chmod +x /usr/local/bin/docker-compose
-        info "Docker Compose installed successfully."
+        sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o "$DOCKER_COMPOSE"
+        sudo chmod +x "$DOCKER_COMPOSE"
+        info "Docker Compose installed successfully at $DOCKER_COMPOSE"
     else
-        info "Docker Compose is already installed."
+        info "Docker Compose is already installed at $DOCKER_COMPOSE"
+    fi
+    
+    # Verify Docker Compose installation
+    if [ -f "$DOCKER_COMPOSE" ]; then
+        info "Docker Compose version: $($DOCKER_COMPOSE --version)"
+    else
+        error "Docker Compose installation failed. Please install it manually."
+        exit 1
     fi
     
     log "Dependencies installed successfully."
@@ -97,11 +112,10 @@ create_project_structure() {
     log "Creating project structure..."
     
     # Create directories
-    mkdir -p fleetflex/{backend,frontend,mongodb}
-    cd fleetflex
+    mkdir -p "$INSTALL_DIR"/{backend,frontend,mongodb}
     
     # Create docker-compose.yml
-    cat > docker-compose.yml << 'EOF'
+    cat > "$INSTALL_DIR/docker-compose.yml" << 'EOF'
 version: '3.8'
 
 services:
@@ -156,7 +170,7 @@ volumes:
 EOF
     
     # Create backend files
-    cat > backend/package.json << 'EOF'
+    cat > "$INSTALL_DIR/backend/package.json" << 'EOF'
 {
   "name": "fleetflex-backend",
   "version": "1.0.0",
@@ -176,7 +190,7 @@ EOF
 }
 EOF
     
-    cat > backend/index.js << 'EOF'
+    cat > "$INSTALL_DIR/backend/index.js" << 'EOF'
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -241,7 +255,7 @@ app.listen(PORT, () => {
 EOF
     
     # Create frontend files
-    cat > frontend/package.json << 'EOF'
+    cat > "$INSTALL_DIR/frontend/package.json" << 'EOF'
 {
   "name": "fleetflex-frontend",
   "version": "1.0.0",
@@ -271,8 +285,8 @@ EOF
 }
 EOF
     
-    mkdir -p frontend/src
-    cat > frontend/src/index.js << 'EOF'
+    mkdir -p "$INSTALL_DIR/frontend/src"
+    cat > "$INSTALL_DIR/frontend/src/index.js" << 'EOF'
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -286,7 +300,7 @@ root.render(
 );
 EOF
     
-    cat > frontend/src/App.js << 'EOF'
+    cat > "$INSTALL_DIR/frontend/src/App.js" << 'EOF'
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './App.css';
@@ -340,7 +354,7 @@ function App() {
 export default App;
 EOF
     
-    cat > frontend/src/index.css << 'EOF'
+    cat > "$INSTALL_DIR/frontend/src/index.css" << 'EOF'
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -356,7 +370,7 @@ code {
 }
 EOF
     
-    cat > frontend/src/App.css << 'EOF'
+    cat > "$INSTALL_DIR/frontend/src/App.css" << 'EOF'
 .app {
   text-align: center;
   max-width: 1200px;
@@ -413,8 +427,8 @@ EOF
 }
 EOF
     
-    mkdir -p frontend/public
-    cat > frontend/public/index.html << 'EOF'
+    mkdir -p "$INSTALL_DIR/frontend/public"
+    cat > "$INSTALL_DIR/frontend/public/index.html" << 'EOF'
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -432,7 +446,7 @@ EOF
 EOF
     
     # Create install script
-    cat > install.sh << 'EOF'
+    cat > "$INSTALL_DIR/install.sh" << EOF
 #!/bin/bash
 
 # FleetFlex Installation Script for AlmaLinux
@@ -443,41 +457,41 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}Starting FleetFlex installation...${NC}"
+echo -e "\${GREEN}Starting FleetFlex installation...${NC}"
 
 # Check if Docker is running
 if ! systemctl is-active --quiet docker; then
-    echo -e "${BLUE}Starting Docker service...${NC}"
+    echo -e "\${BLUE}Starting Docker service...${NC}"
     sudo systemctl start docker
 fi
 
 # Configure SELinux if it's enforcing
-if [ "$(getenforce)" == "Enforcing" ]; then
-    echo -e "${BLUE}Setting SELinux to permissive mode for Docker...${NC}"
+if [ "\$(getenforce)" == "Enforcing" ]; then
+    echo -e "\${BLUE}Setting SELinux to permissive mode for Docker...${NC}"
     sudo setenforce 0
-    echo -e "${BLUE}For permanent change, edit /etc/selinux/config${NC}"
+    echo -e "\${BLUE}For permanent change, edit /etc/selinux/config${NC}"
 fi
 
 # Configure firewall
-echo -e "${BLUE}Configuring firewall...${NC}"
+echo -e "\${BLUE}Configuring firewall...${NC}"
 sudo firewall-cmd --permanent --add-port=3000/tcp
 sudo firewall-cmd --permanent --add-port=5000/tcp
 sudo firewall-cmd --permanent --add-port=27017/tcp
 sudo firewall-cmd --reload
 
 # Start the services
-echo -e "${GREEN}Starting FleetFlex services...${NC}"
-docker-compose up -d
+echo -e "\${GREEN}Starting FleetFlex services...${NC}"
+$DOCKER_COMPOSE up -d
 
-echo -e "${GREEN}FleetFlex installation completed!${NC}"
-echo -e "${BLUE}Frontend:${NC} http://localhost:3000"
-echo -e "${BLUE}Backend API:${NC} http://localhost:5000"
-echo -e "${BLUE}MongoDB:${NC} mongodb://localhost:27017/fleetflex"
+echo -e "\${GREEN}FleetFlex installation completed!${NC}"
+echo -e "\${BLUE}Frontend:${NC} http://localhost:3000"
+echo -e "\${BLUE}Backend API:${NC} http://localhost:5000"
+echo -e "\${BLUE}MongoDB:${NC} mongodb://localhost:27017/fleetflex"
 EOF
     
-    chmod +x install.sh
+    chmod +x "$INSTALL_DIR/install.sh"
     
-    log "Project structure created successfully."
+    log "Project structure created successfully at $INSTALL_DIR"
 }
 
 # Function to configure firewall
@@ -526,10 +540,10 @@ deploy_application() {
     log "Deploying FleetFlex application..."
     
     # Navigate to project directory
-    cd fleetflex
+    cd "$INSTALL_DIR"
     
     # Build and start services
-    docker-compose up -d
+    $DOCKER_COMPOSE up -d
     
     # Wait for services to start
     info "Waiting for services to start..."
@@ -567,10 +581,10 @@ display_summary() {
     echo -e "${BLUE}MongoDB:${NC} mongodb://localhost:27017/fleetflex"
     echo ""
     echo -e "${GREEN}=== Management Commands ===${NC}"
-    echo -e "${BLUE}Start services:${NC} cd fleetflex && docker-compose up -d"
-    echo -e "${BLUE}Stop services:${NC} cd fleetflex && docker-compose down"
-    echo -e "${BLUE}View logs:${NC} cd fleetflex && docker-compose logs -f"
-    echo -e "${BLUE}Restart a service:${NC} cd fleetflex && docker-compose restart [service_name]"
+    echo -e "${BLUE}Start services:${NC} cd $INSTALL_DIR && $DOCKER_COMPOSE up -d"
+    echo -e "${BLUE}Stop services:${NC} cd $INSTALL_DIR && $DOCKER_COMPOSE down"
+    echo -e "${BLUE}View logs:${NC} cd $INSTALL_DIR && $DOCKER_COMPOSE logs -f"
+    echo -e "${BLUE}Restart a service:${NC} cd $INSTALL_DIR && $DOCKER_COMPOSE restart [service_name]"
     echo ""
     echo -e "${GREEN}Thank you for deploying FleetFlex!${NC}"
 }
